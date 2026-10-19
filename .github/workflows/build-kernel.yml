@@ -18,7 +18,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential flex git libssl-dev libelf-dev lld clang-14 llvm-14 python3 cpio rsync
+          sudo apt-get install -y bc bison build-essential flex git libssl-dev libelf-dev gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu python3 cpio rsync
       - name: Checkout Nubia kernel
         run: |
           git clone --depth=1 --branch lineage-22.2 https://github.com/LineageOS/android_kernel_nubia_sdm845.git kernel
@@ -28,9 +28,9 @@ jobs:
           set -euxo pipefail
           test -f arch/arm64/configs/vendor/nubia/sdm845_defconfig
           test -f arch/arm64/configs/vendor/nubia/nx616j.config
-          make O="$GITHUB_WORKSPACE/out" ARCH=arm64 LLVM=-14 LLVM_IAS=1 vendor/nubia/sdm845_defconfig
+          make O="$GITHUB_WORKSPACE/out" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- vendor/nubia/sdm845_defconfig
           scripts/kconfig/merge_config.sh -O "$GITHUB_WORKSPACE/out" "$GITHUB_WORKSPACE/out/.config" arch/arm64/configs/vendor/nubia/nx616j.config
-          make O="$GITHUB_WORKSPACE/out" ARCH=arm64 LLVM=-14 LLVM_IAS=1 olddefconfig
+          make O="$GITHUB_WORKSPACE/out" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
           echo '--- Resolved BPF configuration ---'
           grep -E '^(CONFIG_(BPF|BPF_SYSCALL|CGROUP_BPF|NETFILTER_XT_MATCH_BPF|INET_UDP_DIAG|NET_CLS_BPF|NET_ACT_BPF|BPF_JIT)=|# CONFIG_(BPF|BPF_SYSCALL|CGROUP_BPF|NETFILTER_XT_MATCH_BPF|INET_UDP_DIAG|NET_CLS_BPF|NET_ACT_BPF|BPF_JIT) is not set)' "$GITHUB_WORKSPACE/out/.config" || true
           for opt in CONFIG_BPF CONFIG_BPF_SYSCALL CONFIG_CGROUP_BPF CONFIG_NETFILTER_XT_MATCH_BPF CONFIG_INET_UDP_DIAG; do grep -qx "$opt=y" "$GITHUB_WORKSPACE/out/.config" || { echo "Required option missing: $opt"; exit 1; }; done
@@ -38,7 +38,7 @@ jobs:
         working-directory: kernel
         run: |
           set -euxo pipefail
-          make -j2 O="$GITHUB_WORKSPACE/out" ARCH=arm64 LLVM=-14 LLVM_IAS=1 Image.gz-dtb
+          make -j2 O="$GITHUB_WORKSPACE/out" ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- Image.gz-dtb
       - name: Upload kernel artifact
         uses: actions/upload-artifact@v4
         with:
