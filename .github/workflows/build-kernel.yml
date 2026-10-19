@@ -1,0 +1,50 @@
+name: Build NX616J kernel
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-kernel.yml'
+      - 'README.md'
+
+permissions:
+  contents: read
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    steps:
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential flex git libssl-dev libelf-dev lld clang-14 llvm-14 python3 cpio rsync
+      - name: Checkout Nubia kernel
+        run: |
+          git clone --depth=1 --branch lineage-22.2 https://github.com/LineageOS/android_kernel_nubia_sdm845.git kernel
+      - name: Configure NX616J kernel
+        working-directory: kernel
+        run: |
+          set -euxo pipefail
+          test -f arch/arm64/configs/vendor/nubia/sdm845_defconfig
+          test -f arch/arm64/configs/vendor/nubia/nx616j.config
+          make O="$GITHUB_WORKSPACE/out" ARCH=arm64 LLVM=1 LLVM_IAS=1 vendor/nubia/sdm845_defconfig
+          scripts/kconfig/merge_config.sh -O "$GITHUB_WORKSPACE/out" "$GITHUB_WORKSPACE/out/.config" arch/arm64/configs/vendor/nubia/nx616j.config
+          make O="$GITHUB_WORKSPACE/out" ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
+          echo '--- Resolved BPF configuration ---'
+          grep -E '^(CONFIG_(BPF|BPF_SYSCALL|CGROUP_BPF|NETFILTER_XT_MATCH_BPF|INET_UDP_DIAG|NET_CLS_BPF|NET_ACT_BPF|BPF_JIT)=|# CONFIG_(BPF|BPF_SYSCALL|CGROUP_BPF|NETFILTER_XT_MATCH_BPF|INET_UDP_DIAG|NET_CLS_BPF|NET_ACT_BPF|BPF_JIT) is not set)' "$GITHUB_WORKSPACE/out/.config" || true
+          for opt in CONFIG_BPF CONFIG_BPF_SYSCALL CONFIG_CGROUP_BPF CONFIG_NETFILTER_XT_MATCH_BPF CONFIG_INET_UDP_DIAG; do grep -qx "$opt=y" "$GITHUB_WORKSPACE/out/.config" || { echo "Required option missing: $opt"; exit 1; }; done
+      - name: Build kernel image
+        working-directory: kernel
+        run: |
+          set -euxo pipefail
+          make -j2 O="$GITHUB_WORKSPACE/out" ARCH=arm64 LLVM=1 LLVM_IAS=1 Image.gz-dtb
+      - name: Upload kernel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nx616j-kernel-lineage-22.2
+          path: |
+            out/arch/arm64/boot/Image.gz-dtb
+            out/.config
+          if-no-files-found: error
+          retention-days: 14
